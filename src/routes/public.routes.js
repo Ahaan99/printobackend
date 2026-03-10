@@ -19,22 +19,31 @@ router.post("/refresh", async (req, res) => {
       return res.status(401).json({ message: "User not found" });
     }
 
-    const accessToken = jwt.sign({ id: user._id }, process.env.JWT_SECRET, {
-      expiresIn: "15m",
-    });
+    const accessToken = jwt.sign(
+      { id: user._id, email: user.email, isAdmin: user.isAdmin },
+      process.env.JWT_SECRET,
+      { expiresIn: "15m" }
+    );
 
     res.cookie("accessToken", accessToken, {
       httpOnly: true,
       secure: process.env.NODE_ENV === "production",
       sameSite: "none",
+      path: "/",
       maxAge: 15 * 60 * 1000, // 15 minutes
     });
 
     res.json({ user: user.toAuthJSON() });
   } catch (err) {
-    res.clearCookie("accessToken");
-    res.clearCookie("refreshToken");
-    res.status(403).json({ message: "Invalid or expired refresh token" });
+    const clearOpts = {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "none",
+      path: "/",
+    };
+    res.clearCookie("accessToken", clearOpts);
+    res.clearCookie("refreshToken", clearOpts);
+    res.status(401).json({ message: "Invalid or expired refresh token" });
   }
 });
 

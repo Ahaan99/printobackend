@@ -18,13 +18,28 @@ const generateTokens = (user) => {
   return { accessToken, refreshToken };
 };
 
-const setTokenCookie = (res, token, isAccessToken = false) => {
-  res.cookie(isAccessToken ? "accessToken" : "refreshToken", token, {
+const cookieOptions = (isAccessToken = false) => ({
+  httpOnly: true,
+  secure: process.env.NODE_ENV === "production",
+  sameSite: "none",
+  path: "/",
+  maxAge: isAccessToken ? 24 * 60 * 60 * 1000 : 7 * 24 * 60 * 60 * 1000,
+});
+
+const setTokenCookies = (res, accessToken, refreshToken) => {
+  res.cookie("accessToken", accessToken, cookieOptions(true));
+  res.cookie("refreshToken", refreshToken, cookieOptions(false));
+};
+
+const clearTokenCookies = (res) => {
+  const clearOpts = {
     httpOnly: true,
     secure: process.env.NODE_ENV === "production",
     sameSite: "none",
-    maxAge: isAccessToken ? 24 * 60 * 60 * 1000 : 7 * 24 * 60 * 60 * 1000,
-  });
+    path: "/",
+  };
+  res.clearCookie("accessToken", clearOpts);
+  res.clearCookie("refreshToken", clearOpts);
 };
 
 export const register = async (req, res) => {
@@ -48,8 +63,7 @@ export const register = async (req, res) => {
     const { accessToken, refreshToken } = generateTokens(user);
 
     // Set both tokens as cookies
-    setTokenCookie(res, accessToken, true);
-    setTokenCookie(res, refreshToken);
+    setTokenCookies(res, accessToken, refreshToken);
 
     res.status(201).json({
       message: "User registered successfully",
@@ -68,7 +82,6 @@ export const login = async (req, res) => {
   try {
     const { email, password } = req.body;
     const user = await User.findOne({ email });
-    console.log("Found user:", user ? "Yes" : "No");
 
     if (!user || !(await user.matchPassword(password))) {
       return res.status(401).json({ message: "Invalid email or password" });
@@ -76,9 +89,8 @@ export const login = async (req, res) => {
 
     const { accessToken, refreshToken } = generateTokens(user);
 
-    // Set both tokens
-    setTokenCookie(res, accessToken, true); // Set access token
-    setTokenCookie(res, refreshToken); // Set refresh token
+    // Set both tokens as httpOnly cookies only — no tokens in response body
+    setTokenCookies(res, accessToken, refreshToken);
 
     // Update last login
     user.lastLogin = new Date();
@@ -87,7 +99,6 @@ export const login = async (req, res) => {
     res.json({
       message: "User logged in successfully",
       user: user.toAuthJSON(),
-      token: accessToken, // Include access token in response
     });
   } catch (error) {
     console.error("Login error:", error);
@@ -97,13 +108,13 @@ export const login = async (req, res) => {
 
 export const refreshToken = async (req, res) => {
   try {
-    const refreshToken = req.cookies.refreshToken;
+    const token = req.cookies.refreshToken;
 
-    if (!refreshToken) {
+    if (!token) {
       return res.status(401).json({ message: "Refresh token required" });
     }
 
-    const decoded = jwt.verify(refreshToken, process.env.JWT_REFRESH_SECRET);
+    const decoded = jwt.verify(token, process.env.JWT_REFRESH_SECRET);
     const user = await User.findById(decoded.id);
 
     if (!user) {
@@ -113,15 +124,15 @@ export const refreshToken = async (req, res) => {
     const { accessToken: newAccessToken, refreshToken: newRefreshToken } =
       generateTokens(user);
 
-    setTokenCookie(res, newRefreshToken);
+    // Set BOTH new cookies
+    setTokenCookies(res, newAccessToken, newRefreshToken);
 
     res.json({
       user: user.toAuthJSON(),
-      token: newAccessToken,
     });
   } catch (error) {
     console.error("Token refresh error:", error);
-    res.clearCookie("refreshToken");
+    clearTokenCookies(res);
     res.status(401).json({ message: "Invalid or expired refresh token" });
   }
 };
@@ -136,14 +147,15 @@ export const adminLogin = async (req, res) => {
     }
 
     const { accessToken, refreshToken } = generateTokens(admin);
-    setTokenCookie(res, refreshToken);
+
+    // Set BOTH tokens as httpOnly cookies
+    setTokenCookies(res, accessToken, refreshToken);
 
     admin.lastLogin = new Date();
     await admin.save();
 
     res.json({
       user: admin.toAuthJSON(),
-      token: accessToken,
     });
   } catch (error) {
     console.error("Admin login error:", error);
@@ -152,14 +164,13 @@ export const adminLogin = async (req, res) => {
 };
 
 export const logout = async (req, res) => {
-  res.clearCookie("accessToken");
-  res.clearCookie("refreshToken");
+  clearTokenCookies(res);
   res.json({ message: "Logged out successfully" });
 };
 
 export const me = async (req, res) => {
   try {
-    const user = req.user; // User is set by the protect middleware
+    const user = req.user; // User is set by the verifyToken middleware
     if (!user) {
       return res.status(401).json({ message: "User not authenticated" });
     }
