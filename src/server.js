@@ -102,7 +102,7 @@ app.use((req, res, next) => {
       ...options,
       httpOnly: true,
       secure: secure,
-      sameSite: "strict",
+      sameSite: "none",
       path: "/",
       maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
     });
