@@ -85,28 +85,8 @@ app.use(express.urlencoded({ extended: true }));
 // Security headers middleware
 app.use((req, res, next) => {
   res.header("Cross-Origin-Resource-Policy", "cross-origin");
-  res.header("Cross-Origin-Embedder-Policy", "require-corp");
   res.header("X-Content-Type-Options", "nosniff");
   res.header("X-XSS-Protection", "1; mode=block");
-  next();
-});
-
-// Cookie middleware configuration
-app.use(cookieParser());
-app.use((req, res, next) => {
-  res.cookie = res.cookie.bind(res);
-  const originalCookie = res.cookie;
-  res.cookie = function (name, value, options = {}) {
-    const secure = process.env.NODE_ENV === "production";
-    return originalCookie.call(this, name, value, {
-      ...options,
-      httpOnly: true,
-      secure: secure,
-      sameSite: "none",
-      path: "/",
-      maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
-    });
-  };
   next();
 });
 
@@ -153,8 +133,7 @@ app.use((err, req, res, next) => {
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => {
   console.log(
-    `Server running in ${
-      process.env.NODE_ENV || "development"
+    `Server running in ${process.env.NODE_ENV || "development"
     } mode on port ${PORT}`
   );
 });
