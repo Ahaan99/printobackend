@@ -63,13 +63,20 @@ mongoose
 
 // Global Middleware
 app.use(cookieParser()); // Add cookie parser
+const allowedOrigins = [
+  "http://localhost:5173",
+  "https://frontendprinto-production.up.railway.app"
+];
 app.use(
   cors({
-    origin: process.env.FRONTEND_URL || "http://localhost:5173",
+    origin: function (origin, callback) {
+      if (!origin || allowedOrigins.includes(origin)) {
+        callback(null, true);
+      } else {
+        callback(new Error("Not allowed by CORS"));
+      }
+    },
     credentials: true,
-    methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"], // <-- PATCH added here
-    allowedHeaders: ["Content-Type", "Authorization"],
-    exposedHeaders: ["Set-Cookie", "Access-Control-Allow-Origin"],
   })
 );
 app.use(express.json());
